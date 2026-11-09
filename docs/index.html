@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSM2World2Lua</title>
+<meta name="description" content="3D buildings from OpenStreetMap data in plain Lua, ported from OSM2World. For LÖVE, Garry's Mod, Roblox and any engine that runs Lua.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* colours from the OpenStreetMap map itself: land, buildings, roads, water */
+  :root {
+    --land: #f2efe9;
+    --building: #d9d0c9;
+    --building-edge: #b5a99f;
+    --ink: #2b2622;
+    --muted: #6b625a;
+    --road: #ffffff;
+    --water: #aad3df;
+    --accent: #c0563a;
+    --code-bg: #2b2622;
+    --code-ink: #f2efe9;
+    --rule: #d9d0c9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --land: #1f1c19; --building: #3a332d; --building-edge: #574d44; --ink: #eee8df; --muted: #a99f94;
+      --road: #2b2622; --water: #2d4f5b; --accent: #e07a5c; --code-bg: #12100e; --code-ink: #eee8df; --rule: #3a332d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --land: #1f1c19; --building: #3a332d; --building-edge: #574d44; --ink: #eee8df; --muted: #a99f94;
+    --road: #2b2622; --water: #2d4f5b; --accent: #e07a5c; --code-bg: #12100e; --code-ink: #eee8df; --rule: #3a332d;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--land); color: var(--ink);
+    font-family: "Archivo", system-ui, sans-serif; font-size: 17px; line-height: 1.6; font-variation-settings: "wdth" 100;
+  }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  .text { max-width: 68ch; }
+
+  header.top { display: flex; justify-content: space-between; align-items: baseline; padding: 22px 0 10px; gap: 16px; flex-wrap: wrap; }
+  .mark { font-weight: 800; font-variation-settings: "wdth" 115; font-size: 20px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 15px; }
+  nav a:hover { color: var(--ink); }
+
+  .hero { padding: 28px 0 8px; }
+  .hero h1 {
+    font-size: clamp(38px, 7vw, 76px); line-height: 0.98; margin: 0 0 18px; font-weight: 800;
+    font-variation-settings: "wdth" 125; letter-spacing: -0.02em; max-width: 14ch;
+  }
+  .hero p.lede { font-size: 20px; color: var(--muted); margin: 0 0 26px; max-width: 56ch; }
+  /* the picture sits like a block on the map: building colour, darker edge */
+  figure.plate { margin: 0; background: var(--building); border: 1px solid var(--building-edge); padding: 10px; }
+  figure.plate img { display: block; width: 100%; height: auto; }
+  figure.plate figcaption { font-size: 14px; color: var(--muted); padding: 10px 2px 2px; }
+
+  section { padding: 56px 0 8px; }
+  h2 { font-size: 30px; line-height: 1.15; margin: 0 0 14px; font-weight: 750; font-variation-settings: "wdth" 110; letter-spacing: -0.01em; }
+  h3 { font-size: 19px; margin: 26px 0 6px; font-weight: 700; }
+  p { margin: 0 0 14px; }
+
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 18px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 15.5px; margin-top: 10px; }
+  th, td { text-align: left; padding: 9px 10px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 700; }
+  td.state { white-space: nowrap; font-weight: 600; }
+  .done { color: #3f7a3a; } .part { color: #a3700d; } .todo { color: var(--muted); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .done { color: #8cc785; } :root:not([data-theme="light"]) .part { color: #e0b05a; } }
+  :root[data-theme="dark"] .done { color: #8cc785; } :root[data-theme="dark"] .part { color: #e0b05a; }
+  .table-scroll { overflow-x: auto; }
+
+  pre { background: var(--code-bg); color: var(--code-ink); padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.55; margin: 12px 0 18px; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.9em; }
+  p code, li code, td code { background: var(--building); padding: 1px 5px; }
+
+  footer { padding: 60px 0 40px; color: var(--muted); font-size: 14px; }
+  footer p { max-width: 70ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="mark" href="./">OSM2World2Lua</a>
+    <nav aria-label="Sections"><a href="#status">Status</a><a href="#use">Use it</a><a href="#textures">Textures</a><a href="https://github.com/MightyX3N/OSM2World2Lua">GitHub</a></nav>
+  </header>
+
+  <div class="hero">
+    <h1>OpenStreetMap buildings, in plain Lua</h1>
+    <p class="lede">A port of <a href="https://osm2world.org/">OSM2World</a>'s building rules to Lua. Give it a building's outline and its OpenStreetMap tags, and it gives back textured triangles: walls, windows and the right roof. No engine code, so it works in LÖVE, Garry's Mod, Roblox or anything else that runs Lua.</p>
+    <figure class="plate">
+      <img src="img/street.png" alt="A rendered street of buildings with gabled, hipped, pyramidal and dome roofs and a church with a tower" width="960" height="600">
+      <figcaption>Made by OSM2World2Lua from tags alone: gabled, hipped, pyramidal, skillion and dome roofs, colours and materials from <code>building:colour</code>, <code>building:material</code> and <code>roof:colour</code>, and a church whose tower is a <code>building:part</code>.</figcaption>
+    </figure>
+  </div>
+
+  <section id="what">
+    <div class="text">
+      <h2>What it does</h2>
+      <p>OpenStreetMap describes buildings with an outline and tags: <code>height</code>, <code>building:levels</code>, <code>roof:shape</code>, <code>roof:height</code>, colours and materials, and separate <code>building:part</code> areas for towers and wings. OSM2World turns that into 3D models with years of rules for every tag. OSM2World2Lua follows those rules one for one, so the same tags give the same buildings, just in Lua.</p>
+      <p>It is meant for games that build their world from map data while the player moves, so it only does the geometry: you hand it outlines in metres and get triangle lists grouped by material, ready to turn into your engine's meshes.</p>
+    </div>
+    <div class="gallery">
+      <figure class="plate"><img src="img/street_1.png" alt="The same street from the other side" width="960" height="600" loading="lazy"><figcaption>The other side of the street.</figcaption></figure>
+      <figure class="plate"><img src="img/street_2.png" alt="The street at eye level" width="960" height="600" loading="lazy"><figcaption>At eye level, with OSM2World's window texture on every floor.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="status">
+    <div class="text">
+      <h2>What is ported so far</h2>
+      <p>The library is new and grows piece by piece. Each piece is a direct port of the OSM2World class named next to it.</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Piece</th><th scope="col">OSM2World source</th><th scope="col">State</th></tr></thead>
+        <tbody id="status-rows">
+          <tr><td>Roofs: flat, gabled, saltbox, hipped, side-hipped, half-hipped, side-half-hipped, gambrel, mansard, round<br><span style="color:var(--muted);font-size:14px">Checked against the real OSM2World: 56 of 56 test roofs give the same triangles, order and texture coordinates.</span></td><td><code>FlatRoof, GabledRoof, … RoofWithRidge</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Roofs: pyramidal, cone, skillion, sawtooth, dome, onion, chimney<br><span style="color:var(--muted);font-size:14px">Smooth roofs (dome, onion, cone, round) are lit per triangle.</span></td><td><code>PyramidalRoof, ConeRoof, SkillionRoof, SawtoothRoof, DomeRoof, OnionRoof, ChimneyRoof</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Roof height from roof:height, roof:angle, roof:levels, defaults</td><td><code>Roof, RoofWithRidge, LevelAndHeightData</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Complex roofs from mapped ridge and edge ways<br><span style="color:var(--muted);font-size:14px">Needs the mapped roof:ridge / roof:edge ways; falls back to flat.</span></td><td><code>ComplexRoof</code></td><td class="state todo">Not yet</td></tr>
+          <tr><td>Building types, levels, heights, min_height, building:min_level<br><span style="color:var(--muted);font-size:14px">Indoor level tags (indoor=level) are not used.</span></td><td><code>BuildingDefaults, LevelAndHeightData</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Materials and colours from building:material, building:colour, roof:material, roof:colour<br><span style="color:var(--muted);font-size:14px">Including OSM2World's own colour names (red roofs, white walls, …).</span></td><td><code>BuildingPart.buildMaterial</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Building parts and when the outline itself is drawn<br><span style="color:var(--muted);font-size:14px">The “parts cover too little” rule uses areas, not exact polygon subtraction.</span></td><td><code>Building</code></td><td class="state part">Mostly</td></tr>
+          <tr><td>Walls split at corners, tops following the roof (gable ends)</td><td><code>ExteriorBuildingWall</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Windows as textures, one row per level<br><span style="color:var(--muted);font-size:14px">FLAT_TEXTURES: the window texture drawn just in front of the wall.</span></td><td><code>ExteriorBuildingWall, TexturedWindow</code></td><td class="state done">Ported</td></tr>
+          <tr><td>Windows and doors as 3D geometry, mapped windows and doors</td><td><code>GeometryWindow, Door, WallSurface</code></td><td class="state todo">Not yet</td></tr>
+          <tr><td>Building passages, indoor rooms</td><td><code>BuildingPart, indoor/*</code></td><td class="state todo">Not yet</td></tr>
+          <tr><td>Roads, trees, water, barriers and the other modules<br><span style="color:var(--muted);font-size:14px">Buildings come first.</span></td><td><code>RoadModule, TreeModule, …</code></td><td class="state todo">Not yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="use">
+    <div class="text">
+      <h2>Use it</h2>
+      <p>Copy the <code>o2w</code> folder (and <code>textures</code>) into your project. Plain Lua finds it with <code>require</code>; engines without <code>require</code> set <code>O2W_REQUIRE</code> to their own loader first.</p>
+    </div>
+<pre><code>local o2w = require("o2w")
+local out = o2w.collector({ max_verts = 65535 })
+
+o2w.building({
+  outer = { 0, 0, 10, 0, 10, 8, 0, 8 },           -- metres, x east, y north
+  tags = { building = "house", ["building:levels"] = "2",
+           ["roof:shape"] = "gabled", ["roof:colour"] = "red" },
+  base = 3.5,                                     -- ground elevation
+}, out)
+
+for _, g in ipairs(out:groups()) do
+  local tex = o2w.materials[g.material].tex       -- e.g. "roof_default.png"
+  -- g.d = { x, y, z, u, v, r, g, b, ... }, three vertices per triangle
+end</code></pre>
+    <div class="text">
+      <h3>Buildings with parts</h3>
+      <p>Pass <code>building:part</code> areas in <code>parts</code>. As in OSM2World, the building outline itself is only drawn when it has no parts, or when the parts cover too little of it.</p>
+      <h3>Light</h3>
+      <p>Vertex colours are the material colour times a simple sun and sky light. Pass <code>opts.light(nx, ny, nz)</code> to use your own.</p>
+    </div>
+  </section>
+
+  <section id="textures">
+    <div class="text">
+      <h2>Textures</h2>
+      <p>The textures come from <a href="https://github.com/tordanik/OSM2World-default-style">OSM2World's default style</a>, scaled down for games by <code>tools/import_style.py</code>. Most are from <a href="https://ambientcg.com/">ambientCG</a> (CC0); others come from the <a href="https://wiki.openstreetmap.org/wiki/Texture_Library">OSM Wiki Texture Library</a> (public domain). The style's own textures and settings are CC0. The full list is in <code>textures/SOURCES.md</code>.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>OSM2World2Lua is MIT licensed. It is a port of <a href="https://github.com/tordanik/OSM2World">OSM2World</a> (MIT, © OSM2World contributors) and is not made by the OSM2World team. Map data you feed it is © OpenStreetMap contributors (ODbL).</p>
+  </footer>
+</div>
+</body>
+</html>

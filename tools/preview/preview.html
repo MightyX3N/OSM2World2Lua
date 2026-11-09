@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#c4d8e8}</style></head><body>
+<script type="importmap">{"imports":{"three":"/home/claude/tiny-atlas/tools/gmodcheck/node_modules/three/build/three.module.js"}}</script>
+<script type="module">
+// Renders a scene made by scene.lua from fixed cameras; preview.js saves the pictures.
+import * as THREE from 'three';
+const Q = new URLSearchParams(location.search);
+const W = +(Q.get('w') || 960), H = +(Q.get('h') || 600);
+const sc = await (await fetch(Q.get('scene'))).json();
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#c4d8e8');
+const tl = new THREE.TextureLoader();
+const tex = {};
+const load = p => tex[p] || (tex[p] = new Promise(res => tl.load(Q.get('tex') + '/' + p, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }, undefined, () => res(null))));
+for (const g of sc.groups) {
+  const n = g.d.length / 8, pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i*3] = g.d[i*8]; pos[i*3+1] = g.d[i*8+1]; pos[i*3+2] = g.d[i*8+2]; uv[i*2] = g.d[i*8+3]; uv[i*2+1] = g.d[i*8+4];
+    for (let c = 0; c < 3; c++) col[i*3+c] = Math.pow(Math.min(255, g.d[i*8+5+c]) / 255, 2.2); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const t = g.tex ? await load(g.tex) : null;
+  scene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: t, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5, color: t ? 0xffffff : 0xff00ff })));
+}
+const cam = new THREE.PerspectiveCamera(50, W / H, 0.5, 5000); cam.up.set(0, 0, 1);
+for (let i = 0; i < sc.cameras.length; i++) {
+  const c = sc.cameras[i];
+  cam.position.set(c[0], c[1], c[2]); cam.lookAt(c[3], c[4], c[5]);
+  r.render(scene, cam);
+  await window.save(`${String(i).padStart(2, '0')}.png`, r.domElement.toDataURL('image/png'));
+}
+window.DONE = true;
+</script></body></html>
